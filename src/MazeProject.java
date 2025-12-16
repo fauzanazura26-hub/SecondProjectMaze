@@ -127,11 +127,11 @@ public class MazeProject extends JFrame {
     /**
      * Custom JPanel for rendering the grid.
      */
-//    private class MazePanel extends JPanel {
-//        public MazePanel() {
-//            setPreferredSize(new Dimension(COLS * CELL_SIZE, ROWS * CELL_SIZE));
-//            setBackground(Color.BLACK);
-//        }
+    private class MazePanel extends JPanel {
+        public MazePanel() {
+            setPreferredSize(new Dimension(COLS * CELL_SIZE, ROWS * CELL_SIZE));
+            setBackground(Color.BLACK);
+        }
 
         @Override
         protected void paintComponent(Graphics g) {
