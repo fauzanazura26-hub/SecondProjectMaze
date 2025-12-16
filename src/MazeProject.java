@@ -389,190 +389,190 @@ public class MazeProject extends JFrame {
         endNode.weight = COST_GRASS;
     }
 
-    // --- Pathfinding Execution ---
-
-    private void runAlgorithm(String type) {
-        if (isRunning) return;
-        isRunning = true;
-
-        // Reset grid stats
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
-                grid[r][c].resetForPathfinding();
-            }
-        }
-        mazePanel.repaint();
-
-        Thread algoThread = new Thread(() -> {
-            long startTime = System.currentTimeMillis();
-            int nodesVisited = 0;
-            boolean found = false;
-
-            if (type.equals("BFS")) {
-                found = runBFS();
-            } else if (type.equals("DFS")) {
-                found = runDFS();
-            } else if (type.equals("Dijkstra")) {
-                found = runDijkstra();
-            }
-
-            long duration = System.currentTimeMillis() - startTime;
-
-            // Reconstruct Path
-            int pathCost = 0;
-            int pathLength = 0;
-
-            if (found) {
-                Node current = endNode;
-                while (current != null) {
-                    current.isPath = true;
-                    pathCost += current.weight;
-                    pathLength++;
-                    current = current.parent;
-                    mazePanel.repaint();
-                    try { Thread.sleep(5); } catch (Exception e) {}
-                }
-                // Subtract start node cost usually, but we'll include traversal total
-            }
-
-            // Count visited
-            for(int r=0; r<ROWS; r++) {
-                for(int c=0; c<COLS; c++) {
-                    if(grid[r][c].visited) nodesVisited++;
-                }
-            }
-
-            final int fCost = pathCost;
-            final int fNodes = nodesVisited;
-            final int fLen = pathLength;
-            final boolean fFound = found;
-
-            SwingUtilities.invokeLater(() -> {
-                String result = String.format(
-                        "Algorithm: %s\n" +
-                                "Status: %s\n" +
-                                "Total Cost: %d\n" +
-                                "Visited: %d\n" +
-                                "Path Len: %d\n" +
-                                "Time: %d ms",
-                        type, (fFound ? "Found" : "No Path"), fCost, fNodes, fLen, duration
-                );
-                statsArea.setText(result);
-                isRunning = false;
-            });
-        });
-        algoThread.start();
-    }
-
-    // --- Algorithms ---
-
-    private boolean runBFS() {
-        Queue<Node> queue = new LinkedList<>();
-        startNode.visited = true;
-        queue.add(startNode);
-
-        while (!queue.isEmpty()) {
-            Node current = queue.poll();
-
-            if (current == endNode) return true;
-
-            for (Node neighbor : getNeighbors(current)) {
-                if (!neighbor.visited && !neighbor.isWall) {
-                    neighbor.visited = true;
-                    neighbor.parent = current;
-                    queue.add(neighbor);
-                }
-            }
-
-            visualizeStep();
-        }
-        return false;
-    }
-
-    private boolean runDFS() {
-        Stack<Node> stack = new Stack<>();
-        stack.push(startNode);
-
-        // DFS usually marks visited upon popping or pushing.
-        // To visualize exploration well, we mark on push but handle duplicates.
-        Set<Node> visitedSet = new HashSet<>();
-
-        while (!stack.isEmpty()) {
-            Node current = stack.pop();
-
-            if (current == endNode) return true;
-
-            if (!visitedSet.contains(current)) {
-                visitedSet.add(current);
-                current.visited = true;
-                visualizeStep();
-
-                for (Node neighbor : getNeighbors(current)) {
-                    if (!visitedSet.contains(neighbor) && !neighbor.isWall) {
-                        neighbor.parent = current;
-                        stack.push(neighbor);
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean runDijkstra() {
-        PriorityQueue<Node> pq = new PriorityQueue<>();
-        startNode.distance = 0;
-        pq.add(startNode);
-
-        while (!pq.isEmpty()) {
-            Node current = pq.poll();
-
-            // If we found a shorter path to this node already processed, skip
-            if (current.visited) continue;
-
-            current.visited = true;
-            visualizeStep();
-
-            if (current == endNode) return true;
-
-            for (Node neighbor : getNeighbors(current)) {
-                if (!neighbor.visited && !neighbor.isWall) {
-                    double newDist = current.distance + neighbor.weight;
-                    if (newDist < neighbor.distance) {
-                        neighbor.distance = newDist;
-                        neighbor.parent = current;
-                        pq.add(neighbor);
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    // --- Helpers ---
-
-    private List<Node> getNeighbors(Node n) {
-        List<Node> list = new ArrayList<>();
-        int[][] dirs = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
-        for (int[] d : dirs) {
-            int nr = n.r + d[0];
-            int nc = n.c + d[1];
-            if (isValid(nr, nc)) {
-                list.add(grid[nr][nc]);
-            }
-        }
-        return list;
-    }
-
-    private boolean isValid(int r, int c) {
-        return r >= 0 && r < ROWS && c >= 0 && c < COLS;
-    }
-
-    private void visualizeStep() {
-        try {
-            SwingUtilities.invokeAndWait(() -> mazePanel.repaint());
-            Thread.sleep(DELAY);
-        } catch (Exception e) {
-            // Ignored
-        }
-    }
+//    // --- Pathfinding Execution ---
+//
+//    private void runAlgorithm(String type) {
+//        if (isRunning) return;
+//        isRunning = true;
+//
+//        // Reset grid stats
+//        for (int r = 0; r < ROWS; r++) {
+//            for (int c = 0; c < COLS; c++) {
+//                grid[r][c].resetForPathfinding();
+//            }
+//        }
+//        mazePanel.repaint();
+//
+//        Thread algoThread = new Thread(() -> {
+//            long startTime = System.currentTimeMillis();
+//            int nodesVisited = 0;
+//            boolean found = false;
+//
+//            if (type.equals("BFS")) {
+//                found = runBFS();
+//            } else if (type.equals("DFS")) {
+//                found = runDFS();
+//            } else if (type.equals("Dijkstra")) {
+//                found = runDijkstra();
+//            }
+//
+//            long duration = System.currentTimeMillis() - startTime;
+//
+//            // Reconstruct Path
+//            int pathCost = 0;
+//            int pathLength = 0;
+//
+//            if (found) {
+//                Node current = endNode;
+//                while (current != null) {
+//                    current.isPath = true;
+//                    pathCost += current.weight;
+//                    pathLength++;
+//                    current = current.parent;
+//                    mazePanel.repaint();
+//                    try { Thread.sleep(5); } catch (Exception e) {}
+//                }
+//                // Subtract start node cost usually, but we'll include traversal total
+//            }
+//
+//            // Count visited
+//            for(int r=0; r<ROWS; r++) {
+//                for(int c=0; c<COLS; c++) {
+//                    if(grid[r][c].visited) nodesVisited++;
+//                }
+//            }
+//
+//            final int fCost = pathCost;
+//            final int fNodes = nodesVisited;
+//            final int fLen = pathLength;
+//            final boolean fFound = found;
+//
+//            SwingUtilities.invokeLater(() -> {
+//                String result = String.format(
+//                        "Algorithm: %s\n" +
+//                                "Status: %s\n" +
+//                                "Total Cost: %d\n" +
+//                                "Visited: %d\n" +
+//                                "Path Len: %d\n" +
+//                                "Time: %d ms",
+//                        type, (fFound ? "Found" : "No Path"), fCost, fNodes, fLen, duration
+//                );
+//                statsArea.setText(result);
+//                isRunning = false;
+//            });
+//        });
+//        algoThread.start();
+//    }
+//
+//    // --- Algorithms ---
+//
+//    private boolean runBFS() {
+//        Queue<Node> queue = new LinkedList<>();
+//        startNode.visited = true;
+//        queue.add(startNode);
+//
+//        while (!queue.isEmpty()) {
+//            Node current = queue.poll();
+//
+//            if (current == endNode) return true;
+//
+//            for (Node neighbor : getNeighbors(current)) {
+//                if (!neighbor.visited && !neighbor.isWall) {
+//                    neighbor.visited = true;
+//                    neighbor.parent = current;
+//                    queue.add(neighbor);
+//                }
+//            }
+//
+//            visualizeStep();
+//        }
+//        return false;
+//    }
+//
+//    private boolean runDFS() {
+//        Stack<Node> stack = new Stack<>();
+//        stack.push(startNode);
+//
+//        // DFS usually marks visited upon popping or pushing.
+//        // To visualize exploration well, we mark on push but handle duplicates.
+//        Set<Node> visitedSet = new HashSet<>();
+//
+//        while (!stack.isEmpty()) {
+//            Node current = stack.pop();
+//
+//            if (current == endNode) return true;
+//
+//            if (!visitedSet.contains(current)) {
+//                visitedSet.add(current);
+//                current.visited = true;
+//                visualizeStep();
+//
+//                for (Node neighbor : getNeighbors(current)) {
+//                    if (!visitedSet.contains(neighbor) && !neighbor.isWall) {
+//                        neighbor.parent = current;
+//                        stack.push(neighbor);
+//                    }
+//                }
+//            }
+//        }
+//        return false;
+//    }
+//
+//    private boolean runDijkstra() {
+//        PriorityQueue<Node> pq = new PriorityQueue<>();
+//        startNode.distance = 0;
+//        pq.add(startNode);
+//
+//        while (!pq.isEmpty()) {
+//            Node current = pq.poll();
+//
+//            // If we found a shorter path to this node already processed, skip
+//            if (current.visited) continue;
+//
+//            current.visited = true;
+//            visualizeStep();
+//
+//            if (current == endNode) return true;
+//
+//            for (Node neighbor : getNeighbors(current)) {
+//                if (!neighbor.visited && !neighbor.isWall) {
+//                    double newDist = current.distance + neighbor.weight;
+//                    if (newDist < neighbor.distance) {
+//                        neighbor.distance = newDist;
+//                        neighbor.parent = current;
+//                        pq.add(neighbor);
+//                    }
+//                }
+//            }
+//        }
+//        return false;
+//    }
+//
+//    // --- Helpers ---
+//
+//    private List<Node> getNeighbors(Node n) {
+//        List<Node> list = new ArrayList<>();
+//        int[][] dirs = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+//        for (int[] d : dirs) {
+//            int nr = n.r + d[0];
+//            int nc = n.c + d[1];
+//            if (isValid(nr, nc)) {
+//                list.add(grid[nr][nc]);
+//            }
+//        }
+//        return list;
+//    }
+//
+//    private boolean isValid(int r, int c) {
+//        return r >= 0 && r < ROWS && c >= 0 && c < COLS;
+//    }
+//
+//    private void visualizeStep() {
+//        try {
+//            SwingUtilities.invokeAndWait(() -> mazePanel.repaint());
+//            Thread.sleep(DELAY);
+//        } catch (Exception e) {
+//            // Ignored
+//        }
+//    }
 }
