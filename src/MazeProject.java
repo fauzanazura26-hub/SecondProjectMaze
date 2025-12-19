@@ -1,12 +1,3 @@
-/*
- * MazeProject.java (v6.0 - Volume Control Added)
- * * Features:
- * - Dynamic Scaling: Auto fit window.
- * - Algorithms: BFS, DFS, Dijkstra, A*.
- * - Logic: Randomized Prim's Maze Generation.
- * - Audio: Background music with VOLUME SLIDER.
- */
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
