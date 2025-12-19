@@ -1,34 +1,26 @@
 /*
- * MazeVisualizer.java
- * * A single-file Java Swing application for Maze Generation and Pathfinding Visualization.
+ * MazeVisualizer.java (v4.0 - Auto Fit / Responsive)
  * * Features:
- * - Generation: Randomized Prim's Algorithm.
- * - Terrain: Grass (Cost 1), Mud (Cost 5), Water (Cost 10).
- * - Pathfinding: BFS, DFS, Dijkstra.
- * - Visualization: Step-by-step animation of exploration and final path.
- * * References/Citations:
- * - Prim, R. C. (1957). "Shortest connection networks and some generalizations".
- * Bell System Technical Journal. (Used for Maze Generation).
- * - Dijkstra, E. W. (1959). "A note on two problems in connexion with graphs".
- * Numerische Mathematik. (Used for Weighted Pathfinding).
+ * - Dynamic Scaling: Cells resize automatically to fit the window.
+ * (20x20 = Big Cells, 100x100 = Small Cells).
+ * - Algorithms: BFS, DFS, Dijkstra, A*.
+ * - Logic: Randomized Prim's Maze Generation.
  */
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
-import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.util.*;
 import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
 
 public class MazeProject extends JFrame {
 
-    // --- Configuration Constants ---
-    private static final int ROWS = 41; // Must be odd for Prim's
-    private static final int COLS = 41; // Must be odd for Prim's
-    private static final int CELL_SIZE = 15;
-    private static final int DELAY = 10; // Animation delay in ms
+    // --- Configuration ---
+    private int rows = 21; // Default start size
+    private int cols = 21;
+    private static final int DELAY = 15; // Animation delay
 
     // --- Terrain Costs ---
     private static final int COST_GRASS = 1;
@@ -42,8 +34,8 @@ public class MazeProject extends JFrame {
     private static final Color COL_WATER = new Color(135, 206, 235);
     private static final Color COL_START = Color.GREEN;
     private static final Color COL_GOAL = Color.RED;
-    private static final Color COL_VISITED = new Color(255, 255, 0, 150); // Translucent Yellow
-    private static final Color COL_PATH = new Color(138, 43, 226); // Blue Violet
+    private static final Color COL_VISITED = new Color(255, 255, 0, 150);
+    private static final Color COL_PATH = new Color(138, 43, 226);
 
     // --- Global State ---
     private Node[][] grid;
@@ -51,6 +43,7 @@ public class MazeProject extends JFrame {
     private Node endNode;
     private MazePanel mazePanel;
     private JTextArea statsArea;
+    private JSlider sizeSlider;
     private boolean isRunning = false;
 
     public static void main(String[] args) {
@@ -64,104 +57,122 @@ public class MazeProject extends JFrame {
     }
 
     public MazeProject() {
-        setTitle("Maze Generation & Pathfinding Visualizer");
+        setTitle("Mini Project 2 (MAZE) ");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
-        setResizable(false);
 
-        // Initialize Grid
-        grid = new Node[ROWS][COLS];
-        initializeGrid();
-
-        // UI Components
+        // --- Center Panel (The Maze) ---
+        // No ScrollPane needed anymore, it will auto-fit
         mazePanel = new MazePanel();
         add(mazePanel, BorderLayout.CENTER);
 
+        // --- Right Panel (Controls) ---
         JPanel controlPanel = createControlPanel();
         add(controlPanel, BorderLayout.EAST);
 
+        // --- Window Setup ---
+        setPreferredSize(new Dimension(1000, 700)); // Default Window Size
         pack();
         setLocationRelativeTo(null);
 
-        // Generate initial maze
-        generateMaze();
+        // Initial Generation
+        resizeGrid(rows);
+
+        // Re-render when window is resized by user
+        addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                mazePanel.repaint();
+            }
+        });
     }
 
     // --- Inner Classes ---
 
-    /**
-     * Represents a single cell in the grid.
-     */
     private static class Node implements Comparable<Node> {
         int r, c;
         boolean isWall;
-        int weight; // 1, 5, or 10
+        int weight;
         boolean visited;
-        boolean isPath; // For final path
+        boolean isPath;
         Node parent;
-        double distance; // For Dijkstra
+
+        double gCost;
+        double hCost;
+        double fCost;
 
         Node(int r, int c) {
             this.r = r;
             this.c = c;
-            this.isWall = true; // Start as wall
+            this.isWall = true;
             this.weight = COST_GRASS;
             this.visited = false;
             this.isPath = false;
-            this.distance = Double.MAX_VALUE;
+            this.gCost = Double.MAX_VALUE;
+            this.fCost = Double.MAX_VALUE;
         }
 
         void resetForPathfinding() {
             this.visited = false;
             this.isPath = false;
             this.parent = null;
-            this.distance = Double.MAX_VALUE;
+            this.gCost = Double.MAX_VALUE;
+            this.hCost = 0;
+            this.fCost = Double.MAX_VALUE;
         }
 
         @Override
         public int compareTo(Node other) {
-            return Double.compare(this.distance, other.distance);
+            return Double.compare(this.fCost, other.fCost);
         }
     }
 
-    /**
-     * Custom JPanel for rendering the grid.
-     */
     private class MazePanel extends JPanel {
-        public MazePanel() {
-            setPreferredSize(new Dimension(COLS * CELL_SIZE, ROWS * CELL_SIZE));
-            setBackground(Color.BLACK);
-        }
 
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
+            if (grid == null) return;
 
-            for (int r = 0; r < ROWS; r++) {
-                for (int c = 0; c < COLS; c++) {
+            // --- Auto-Fit Logic ---
+            int panelW = getWidth();
+            int panelH = getHeight();
+
+            // Calculate largest possible square cell size that fits
+            int cellW = panelW / cols;
+            int cellH = panelH / rows;
+            int cellSize = Math.max(1, Math.min(cellW, cellH)); // Ensure at least 1px
+
+            // Calculate offsets to center the maze
+            int totalGridW = cellSize * cols;
+            int totalGridH = cellSize * rows;
+            int startX = (panelW - totalGridW) / 2;
+            int startY = (panelH - totalGridH) / 2;
+
+            // Draw Background
+            g.setColor(Color.BLACK);
+            g.fillRect(0, 0, panelW, panelH);
+
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
                     Node node = grid[r][c];
 
-                    // Determine Background Color
-                    if (node.isWall) {
-                        g.setColor(COL_WALL);
-                    } else if (node == startNode) {
-                        g.setColor(COL_START);
-                    } else if (node == endNode) {
-                        g.setColor(COL_GOAL);
-                    } else if (node.isPath) {
-                        g.setColor(COL_PATH);
-                    } else if (node.visited && node != startNode && node != endNode) {
-                        // Blend terrain color with visited color
+                    if (node.isWall) g.setColor(COL_WALL);
+                    else if (node == startNode) g.setColor(COL_START);
+                    else if (node == endNode) g.setColor(COL_GOAL);
+                    else if (node.isPath) g.setColor(COL_PATH);
+                    else if (node.visited && node != startNode && node != endNode)
                         g.setColor(blend(getTerrainColor(node.weight), COL_VISITED));
-                    } else {
-                        g.setColor(getTerrainColor(node.weight));
+                    else g.setColor(getTerrainColor(node.weight));
+
+                    // Draw the cell
+                    g.fillRect(startX + c * cellSize, startY + r * cellSize, cellSize, cellSize);
+
+                    // Only draw grid lines if cells are big enough (> 5px)
+                    if (cellSize > 5) {
+                        g.setColor(new Color(0, 0, 0, 40));
+                        g.drawRect(startX + c * cellSize, startY + r * cellSize, cellSize, cellSize);
                     }
-
-                    g.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
-
-                    // Optional: Draw grid lines (subtle)
-                    g.setColor(new Color(0, 0, 0, 50));
-                    g.drawRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
                 }
             }
         }
@@ -189,7 +200,7 @@ public class MazeProject extends JFrame {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 10, 10, 10));
-        panel.setPreferredSize(new Dimension(220, 0));
+        panel.setPreferredSize(new Dimension(240, 0));
 
         JLabel title = new JLabel("Controls");
         title.setFont(new Font("SansSerif", Font.BOLD, 18));
@@ -197,6 +208,34 @@ public class MazeProject extends JFrame {
         panel.add(title);
         panel.add(Box.createVerticalStrut(15));
 
+        // --- Maze Size Slider ---
+        JLabel sizeLabel = new JLabel("Maze Size: " + rows + "x" + cols);
+        sizeLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(sizeLabel);
+
+        sizeSlider = new JSlider(JSlider.HORIZONTAL, 21, 101, 21);
+        sizeSlider.setMajorTickSpacing(20);
+        sizeSlider.setMinorTickSpacing(10);
+        sizeSlider.setPaintTicks(true);
+        sizeSlider.setAlignmentX(Component.CENTER_ALIGNMENT);
+
+        sizeSlider.addChangeListener(e -> {
+            if (!sizeSlider.getValueIsAdjusting()) {
+                int val = sizeSlider.getValue();
+                if (val % 2 == 0) val++; // Ensure odd
+
+                if (val != rows && !isRunning) {
+                    resizeGrid(val);
+                    sizeLabel.setText("Maze Size: " + rows + "x" + cols);
+                } else if (isRunning) {
+                    sizeSlider.setValue(rows); // Lock while running
+                }
+            }
+        });
+        panel.add(sizeSlider);
+        panel.add(Box.createVerticalStrut(15));
+
+        // --- Buttons ---
         JButton btnReset = new JButton("Generate New Maze");
         styleButton(btnReset);
         btnReset.addActionListener(e -> {
@@ -205,22 +244,13 @@ public class MazeProject extends JFrame {
         panel.add(btnReset);
         panel.add(Box.createVerticalStrut(20));
 
-        JButton btnBFS = new JButton("Run BFS");
-        styleButton(btnBFS);
-        btnBFS.addActionListener(e -> runAlgorithm("BFS"));
-        panel.add(btnBFS);
-        panel.add(Box.createVerticalStrut(10));
-
-        JButton btnDFS = new JButton("Run DFS");
-        styleButton(btnDFS);
-        btnDFS.addActionListener(e -> runAlgorithm("DFS"));
-        panel.add(btnDFS);
-        panel.add(Box.createVerticalStrut(10));
-
-        JButton btnDijkstra = new JButton("Run Dijkstra");
-        styleButton(btnDijkstra);
-        btnDijkstra.addActionListener(e -> runAlgorithm("Dijkstra"));
-        panel.add(btnDijkstra);
+        panel.add(createAlgoButton("Run BFS"));
+        panel.add(Box.createVerticalStrut(5));
+        panel.add(createAlgoButton("Run DFS"));
+        panel.add(Box.createVerticalStrut(5));
+        panel.add(createAlgoButton("Run Dijkstra"));
+        panel.add(Box.createVerticalStrut(5));
+        panel.add(createAlgoButton("Run A* (A-Star)"));
 
         panel.add(Box.createVerticalStrut(20));
 
@@ -244,9 +274,19 @@ public class MazeProject extends JFrame {
         return panel;
     }
 
+    private JButton createAlgoButton(String text) {
+        JButton btn = new JButton(text);
+        styleButton(btn);
+        btn.addActionListener(e -> {
+            String algo = text.replace("Run ", "").replace(" (A-Star)", "");
+            runAlgorithm(algo);
+        });
+        return btn;
+    }
+
     private void styleButton(JButton btn) {
         btn.setAlignmentX(Component.CENTER_ALIGNMENT);
-        btn.setMaximumSize(new Dimension(180, 35));
+        btn.setMaximumSize(new Dimension(200, 35));
     }
 
     private JPanel createLegendLabel(String text, Color c) {
@@ -262,32 +302,23 @@ public class MazeProject extends JFrame {
 
     // --- Core Logic ---
 
-    private void initializeGrid() {
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
+    private void resizeGrid(int size) {
+        this.rows = size;
+        this.cols = size;
+        grid = new Node[rows][cols];
+        generateMaze();
+    }
+
+    private void generateMaze() {
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
                 grid[r][c] = new Node(r, c);
             }
         }
-    }
 
-    /**
-     * Generates a maze using Randomized Prim's Algorithm.
-     */
-    private void generateMaze() {
-        // Reset Grid
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
-                grid[r][c] = new Node(r, c); // Re-instantiate to clear walls/weights
-            }
-        }
-
-        // Prim's Logic
-        // 1. Start with a grid full of walls (already done in Node constructor)
-
-        // 2. Pick a random start cell (ensure odd coordinates)
         Random rand = new Random();
-        int startR = 1 + rand.nextInt((ROWS - 1) / 2) * 2;
-        int startC = 1 + rand.nextInt((COLS - 1) / 2) * 2;
+        int startR = 1 + rand.nextInt((rows - 1) / 2) * 2;
+        int startC = 1 + rand.nextInt((cols - 1) / 2) * 2;
 
         Node firstCell = grid[startR][startC];
         firstCell.isWall = false;
@@ -296,81 +327,66 @@ public class MazeProject extends JFrame {
         addWalls(firstCell, walls);
 
         while (!walls.isEmpty()) {
-            // Pick random wall
             int index = rand.nextInt(walls.size());
             Node wall = walls.remove(index);
 
-            // Check neighbors
             Node[] result = getDividedCells(wall);
             if (result != null) {
                 Node visited = result[0];
                 Node unvisited = result[1];
 
                 if (unvisited.isWall) {
-                    // Make the wall a path
                     wall.isWall = false;
-                    // Make the unvisited cell a path
                     unvisited.isWall = false;
-
                     addWalls(unvisited, walls);
                 }
             }
         }
 
-        // 3. Assign Terrain Types and Pick Start/End
         assignTerrainAndEndpoints(rand);
 
-        statsArea.setText("Maze Generated.\nSelect an algorithm.");
+        statsArea.setText("Maze Generated.\nSize: " + rows + "x" + cols + "\nSelect an algorithm.");
         mazePanel.repaint();
     }
 
     private void addWalls(Node cell, ArrayList<Node> wallList) {
         int r = cell.r;
         int c = cell.c;
-        int[][] dirs = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}}; // N, S, W, E
+        int[][] dirs = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
 
         for (int[] d : dirs) {
             int nr = r + d[0];
             int nc = c + d[1];
             if (isValid(nr, nc) && grid[nr][nc].isWall) {
-                // Check if this wall isn't already added (simple check, duplicates ok for Prim's but distinct is better)
                 wallList.add(grid[nr][nc]);
             }
         }
     }
 
     private Node[] getDividedCells(Node wall) {
-        // A wall connects two cells if it is between them.
-        // We look for neighbors at distance 1.
         int r = wall.r;
         int c = wall.c;
-
-        // Vertical check
         if (isValid(r - 1, c) && isValid(r + 1, c)) {
             Node top = grid[r - 1][c];
             Node bottom = grid[r + 1][c];
             if (!top.isWall && bottom.isWall) return new Node[]{top, bottom};
             if (top.isWall && !bottom.isWall) return new Node[]{bottom, top};
         }
-
-        // Horizontal check
         if (isValid(r, c - 1) && isValid(r, c + 1)) {
             Node left = grid[r][c - 1];
             Node right = grid[r][c + 1];
             if (!left.isWall && right.isWall) return new Node[]{left, right};
             if (left.isWall && !right.isWall) return new Node[]{right, left};
         }
-
         return null;
     }
 
     private void assignTerrainAndEndpoints(Random rand) {
         List<Node> walkable = new ArrayList<>();
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
                 if (!grid[r][c].isWall) {
                     walkable.add(grid[r][c]);
-                    // Randomly assign terrain
                     int chance = rand.nextInt(100);
                     if (chance < 15) grid[r][c].weight = COST_WATER;
                     else if (chance < 35) grid[r][c].weight = COST_MUD;
@@ -379,14 +395,12 @@ public class MazeProject extends JFrame {
             }
         }
 
-        // Set Start (Top Left-ish) and End (Bottom Right-ish)
-        // Simple search for first and last valid block
-        startNode = walkable.get(0);
-        endNode = walkable.get(walkable.size() - 1);
-
-        // Ensure start/end are Grass for clarity
-        startNode.weight = COST_GRASS;
-        endNode.weight = COST_GRASS;
+        if (!walkable.isEmpty()) {
+            startNode = walkable.get(0);
+            endNode = walkable.get(walkable.size() - 1);
+            startNode.weight = COST_GRASS;
+            endNode.weight = COST_GRASS;
+        }
     }
 
     // --- Pathfinding Execution ---
@@ -395,9 +409,8 @@ public class MazeProject extends JFrame {
         if (isRunning) return;
         isRunning = true;
 
-        // Reset grid stats
-        for (int r = 0; r < ROWS; r++) {
-            for (int c = 0; c < COLS; c++) {
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
                 grid[r][c].resetForPathfinding();
             }
         }
@@ -408,17 +421,13 @@ public class MazeProject extends JFrame {
             int nodesVisited = 0;
             boolean found = false;
 
-            if (type.equals("BFS")) {
-                found = runBFS();
-            } else if (type.equals("DFS")) {
-                found = runDFS();
-            } else if (type.equals("Dijkstra")) {
-                found = runDijkstra();
-            }
+            if (type.equals("BFS")) found = runBFS();
+            else if (type.equals("DFS")) found = runDFS();
+            else if (type.equals("Dijkstra")) found = runDijkstra();
+            else if (type.equals("A*")) found = runAStar();
 
             long duration = System.currentTimeMillis() - startTime;
 
-            // Reconstruct Path
             int pathCost = 0;
             int pathLength = 0;
 
@@ -432,12 +441,10 @@ public class MazeProject extends JFrame {
                     mazePanel.repaint();
                     try { Thread.sleep(5); } catch (Exception e) {}
                 }
-                // Subtract start node cost usually, but we'll include traversal total
             }
 
-            // Count visited
-            for(int r=0; r<ROWS; r++) {
-                for(int c=0; c<COLS; c++) {
+            for(int r=0; r<rows; r++) {
+                for(int c=0; c<cols; c++) {
                     if(grid[r][c].visited) nodesVisited++;
                 }
             }
@@ -449,13 +456,14 @@ public class MazeProject extends JFrame {
 
             SwingUtilities.invokeLater(() -> {
                 String result = String.format(
-                        "Algorithm: %s\n" +
+                        "Algo: %s\n" +
+                                "Size: %dx%d\n" +
                                 "Status: %s\n" +
-                                "Total Cost: %d\n" +
+                                "Cost: %d\n" +
                                 "Visited: %d\n" +
-                                "Path Len: %d\n" +
+                                "Len: %d\n" +
                                 "Time: %d ms",
-                        type, (fFound ? "Found" : "No Path"), fCost, fNodes, fLen, duration
+                        type, rows, cols, (fFound ? "Found" : "No Path"), fCost, fNodes, fLen, duration
                 );
                 statsArea.setText(result);
                 isRunning = false;
@@ -473,7 +481,6 @@ public class MazeProject extends JFrame {
 
         while (!queue.isEmpty()) {
             Node current = queue.poll();
-
             if (current == endNode) return true;
 
             for (Node neighbor : getNeighbors(current)) {
@@ -483,7 +490,6 @@ public class MazeProject extends JFrame {
                     queue.add(neighbor);
                 }
             }
-
             visualizeStep();
         }
         return false;
@@ -492,14 +498,10 @@ public class MazeProject extends JFrame {
     private boolean runDFS() {
         Stack<Node> stack = new Stack<>();
         stack.push(startNode);
-
-        // DFS usually marks visited upon popping or pushing.
-        // To visualize exploration well, we mark on push but handle duplicates.
         Set<Node> visitedSet = new HashSet<>();
 
         while (!stack.isEmpty()) {
             Node current = stack.pop();
-
             if (current == endNode) return true;
 
             if (!visitedSet.contains(current)) {
@@ -520,15 +522,13 @@ public class MazeProject extends JFrame {
 
     private boolean runDijkstra() {
         PriorityQueue<Node> pq = new PriorityQueue<>();
-        startNode.distance = 0;
+        startNode.gCost = 0;
+        startNode.fCost = 0;
         pq.add(startNode);
 
         while (!pq.isEmpty()) {
             Node current = pq.poll();
-
-            // If we found a shorter path to this node already processed, skip
             if (current.visited) continue;
-
             current.visited = true;
             visualizeStep();
 
@@ -536,9 +536,10 @@ public class MazeProject extends JFrame {
 
             for (Node neighbor : getNeighbors(current)) {
                 if (!neighbor.visited && !neighbor.isWall) {
-                    double newDist = current.distance + neighbor.weight;
-                    if (newDist < neighbor.distance) {
-                        neighbor.distance = newDist;
+                    double newGCost = current.gCost + neighbor.weight;
+                    if (newGCost < neighbor.gCost) {
+                        neighbor.gCost = newGCost;
+                        neighbor.fCost = newGCost;
                         neighbor.parent = current;
                         pq.add(neighbor);
                     }
@@ -546,6 +547,44 @@ public class MazeProject extends JFrame {
             }
         }
         return false;
+    }
+
+    private boolean runAStar() {
+        PriorityQueue<Node> pq = new PriorityQueue<>();
+
+        startNode.gCost = 0;
+        startNode.hCost = heuristic(startNode, endNode);
+        startNode.fCost = startNode.gCost + startNode.hCost;
+
+        pq.add(startNode);
+
+        while (!pq.isEmpty()) {
+            Node current = pq.poll();
+            if (current.visited) continue;
+            current.visited = true;
+            visualizeStep();
+
+            if (current == endNode) return true;
+
+            for (Node neighbor : getNeighbors(current)) {
+                if (!neighbor.visited && !neighbor.isWall) {
+                    double newGCost = current.gCost + neighbor.weight;
+
+                    if (newGCost < neighbor.gCost) {
+                        neighbor.gCost = newGCost;
+                        neighbor.hCost = heuristic(neighbor, endNode);
+                        neighbor.fCost = neighbor.gCost + neighbor.hCost;
+                        neighbor.parent = current;
+                        pq.add(neighbor);
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private double heuristic(Node a, Node b) {
+        return Math.abs(a.r - b.r) + Math.abs(a.c - b.c);
     }
 
     // --- Helpers ---
@@ -564,15 +603,18 @@ public class MazeProject extends JFrame {
     }
 
     private boolean isValid(int r, int c) {
-        return r >= 0 && r < ROWS && c >= 0 && c < COLS;
+        return r >= 0 && r < rows && c >= 0 && c < cols;
     }
 
     private void visualizeStep() {
+        // Faster animation on big grids so it doesn't take forever
+        int dynamicDelay = (rows > 50) ? 1 : DELAY;
         try {
             SwingUtilities.invokeAndWait(() -> mazePanel.repaint());
-            Thread.sleep(DELAY);
-        } catch (Exception e) {
-            // Ignored
-        }
+            // Small sleep only if grid is not huge
+            if (rows <= 60) {
+                Thread.sleep(dynamicDelay);
+            }
+        } catch (Exception e) {}
     }
 }
