@@ -1,10 +1,10 @@
 /*
- * MazeVisualizer.java (v4.0 - Auto Fit / Responsive)
+ * MazeProject.java (v6.0 - Volume Control Added)
  * * Features:
- * - Dynamic Scaling: Cells resize automatically to fit the window.
- * (20x20 = Big Cells, 100x100 = Small Cells).
+ * - Dynamic Scaling: Auto fit window.
  * - Algorithms: BFS, DFS, Dijkstra, A*.
  * - Logic: Randomized Prim's Maze Generation.
+ * - Audio: Background music with VOLUME SLIDER.
  */
 
 import javax.swing.*;
@@ -12,8 +12,11 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.List;
+import javax.sound.sampled.*; // Import khusus Audio
 
 public class MazeProject extends JFrame {
 
@@ -21,6 +24,10 @@ public class MazeProject extends JFrame {
     private int rows = 21; // Default start size
     private int cols = 21;
     private static final int DELAY = 15; // Animation delay
+
+    // --- Audio Configuration ---
+    // Ganti nama file ini sesuai nama file musik kamu
+    private static final String SOUND_FILE = "src/bgm.wav";
 
     // --- Terrain Costs ---
     private static final int COST_GRASS = 1;
@@ -46,6 +53,10 @@ public class MazeProject extends JFrame {
     private JSlider sizeSlider;
     private boolean isRunning = false;
 
+    // --- Audio State ---
+    private Clip musicClip;
+    private FloatControl gainControl; // Kontroler Volume (dB)
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             try {
@@ -62,7 +73,6 @@ public class MazeProject extends JFrame {
         setLayout(new BorderLayout());
 
         // --- Center Panel (The Maze) ---
-        // No ScrollPane needed anymore, it will auto-fit
         mazePanel = new MazePanel();
         add(mazePanel, BorderLayout.CENTER);
 
@@ -71,7 +81,7 @@ public class MazeProject extends JFrame {
         add(controlPanel, BorderLayout.EAST);
 
         // --- Window Setup ---
-        setPreferredSize(new Dimension(1000, 700)); // Default Window Size
+        setPreferredSize(new Dimension(1000, 750)); // Sedikit diperbesar agar muat kontrol volume
         pack();
         setLocationRelativeTo(null);
 
@@ -85,6 +95,35 @@ public class MazeProject extends JFrame {
                 mazePanel.repaint();
             }
         });
+
+        // --- PLAY MUSIC ---
+        playBackgroundMusic(SOUND_FILE);
+    }
+
+    // --- AUDIO LOGIC ---
+    private void playBackgroundMusic(String filePath) {
+        try {
+            File soundFile = new File(filePath);
+            if (soundFile.exists()) {
+                AudioInputStream audioInput = AudioSystem.getAudioInputStream(soundFile);
+                musicClip = AudioSystem.getClip();
+                musicClip.open(audioInput);
+
+                // Ambil kontrol volume (Master Gain)
+                if (musicClip.isControlSupported(FloatControl.Type.MASTER_GAIN)) {
+                    gainControl = (FloatControl) musicClip.getControl(FloatControl.Type.MASTER_GAIN);
+                    // Set default volume agak kecil (-10dB) biar tidak kaget
+                    gainControl.setValue(-10.0f);
+                }
+
+                musicClip.loop(Clip.LOOP_CONTINUOUSLY);
+                musicClip.start();
+            } else {
+                System.out.println("⚠️ FILE AUDIO TIDAK DITEMUKAN: " + filePath);
+            }
+        } catch (Exception e) {
+            System.out.println("❌ Error Audio: " + e.getMessage());
+        }
     }
 
     // --- Inner Classes ---
@@ -138,18 +177,15 @@ public class MazeProject extends JFrame {
             int panelW = getWidth();
             int panelH = getHeight();
 
-            // Calculate largest possible square cell size that fits
             int cellW = panelW / cols;
             int cellH = panelH / rows;
-            int cellSize = Math.max(1, Math.min(cellW, cellH)); // Ensure at least 1px
+            int cellSize = Math.max(1, Math.min(cellW, cellH));
 
-            // Calculate offsets to center the maze
             int totalGridW = cellSize * cols;
             int totalGridH = cellSize * rows;
             int startX = (panelW - totalGridW) / 2;
             int startY = (panelH - totalGridH) / 2;
 
-            // Draw Background
             g.setColor(Color.BLACK);
             g.fillRect(0, 0, panelW, panelH);
 
@@ -165,10 +201,8 @@ public class MazeProject extends JFrame {
                         g.setColor(blend(getTerrainColor(node.weight), COL_VISITED));
                     else g.setColor(getTerrainColor(node.weight));
 
-                    // Draw the cell
                     g.fillRect(startX + c * cellSize, startY + r * cellSize, cellSize, cellSize);
 
-                    // Only draw grid lines if cells are big enough (> 5px)
                     if (cellSize > 5) {
                         g.setColor(new Color(0, 0, 0, 40));
                         g.drawRect(startX + c * cellSize, startY + r * cellSize, cellSize, cellSize);
@@ -222,17 +256,36 @@ public class MazeProject extends JFrame {
         sizeSlider.addChangeListener(e -> {
             if (!sizeSlider.getValueIsAdjusting()) {
                 int val = sizeSlider.getValue();
-                if (val % 2 == 0) val++; // Ensure odd
+                if (val % 2 == 0) val++;
 
                 if (val != rows && !isRunning) {
                     resizeGrid(val);
                     sizeLabel.setText("Maze Size: " + rows + "x" + cols);
                 } else if (isRunning) {
-                    sizeSlider.setValue(rows); // Lock while running
+                    sizeSlider.setValue(rows);
                 }
             }
         });
         panel.add(sizeSlider);
+        panel.add(Box.createVerticalStrut(15));
+
+        // --- VOLUME SLIDER (NEW FEATURE) ---
+        JLabel volumeLabel = new JLabel("Music Volume");
+        volumeLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        panel.add(volumeLabel);
+
+        // Range dB: -50 (Silent) sampai 6 (Loud). Default -10.
+        JSlider volSlider = new JSlider(JSlider.HORIZONTAL, -50, 6, -10);
+        volSlider.setAlignmentX(Component.CENTER_ALIGNMENT);
+        volSlider.addChangeListener(e -> {
+            if (gainControl != null) {
+                float value = volSlider.getValue();
+                // Jika paling kiri, mute total (-80dB adalah standar mute di Java)
+                if (value == -50) value = -80.0f;
+                gainControl.setValue(value);
+            }
+        });
+        panel.add(volSlider);
         panel.add(Box.createVerticalStrut(15));
 
         // --- Buttons ---
